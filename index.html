@@ -268,7 +268,7 @@ main{flex:1;overflow-y:auto;padding:0 16px 90px}
 /* ═══════════ 데이터 ═══════════ */
 let records = JSON.parse(localStorage.getItem('bp_records') || '[]');
 // 배포자가 여기에 Client ID를 넣어두면 모든 기기에서 입력 없이 사용됩니다.
-const DEFAULT_CLIENT_ID = '';
+const DEFAULT_CLIENT_ID = '647900463081-do298hsv2s11lcc78a3v2sih1kpopn2p.apps.googleusercontent.com';
 let settings = Object.assign({clientId:'', sheetId:'', connected:false, autoSync:false, lastSync:''}, JSON.parse(localStorage.getItem('bp_settings') || '{}'));
 if(!settings.clientId && DEFAULT_CLIENT_ID) settings.clientId = DEFAULT_CLIENT_ID;
 let editingId = null;
