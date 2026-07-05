@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>혈압 관리</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{
   --bg:#f1f5f9; --card:#ffffff; --text:#1e293b; --sub:#64748b; --line:#e2e8f0;
@@ -222,9 +223,11 @@ main{flex:1;overflow-y:auto;padding:0 16px 90px}
       <button class="close-x" onclick="closeModal('settingsModal')">✕</button>
       <h2>⚙️ 설정</h2>
       <div class="row">
-        <label>Google Apps Script 웹앱 URL (구글 시트 연동)</label>
-        <input type="url" id="setUrl" placeholder="https://script.google.com/macros/s/.../exec">
+        <label>Google Client ID (최초 1회 입력, README 참고)</label>
+        <input type="url" id="setClientId" placeholder="xxxxxxxx.apps.googleusercontent.com">
       </div>
+      <button class="btn primary" id="gConnectBtn" onclick="connectGoogle()">🔗 Google 계정 연결</button>
+      <div class="sync-status" id="gSheetLink"></div>
       <div class="row">
         <label class="chk" style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text)">
           <input type="checkbox" id="setAutoSync">저장할 때마다 자동으로 시트에 백업
@@ -264,7 +267,10 @@ main{flex:1;overflow-y:auto;padding:0 16px 90px}
 'use strict';
 /* ═══════════ 데이터 ═══════════ */
 let records = JSON.parse(localStorage.getItem('bp_records') || '[]');
-let settings = Object.assign({scriptUrl:'', autoSync:false, lastSync:''}, JSON.parse(localStorage.getItem('bp_settings') || '{}'));
+// 배포자가 여기에 Client ID를 넣어두면 모든 기기에서 입력 없이 사용됩니다.
+const DEFAULT_CLIENT_ID = '';
+let settings = Object.assign({clientId:'', sheetId:'', connected:false, autoSync:false, lastSync:''}, JSON.parse(localStorage.getItem('bp_settings') || '{}'));
+if(!settings.clientId && DEFAULT_CLIENT_ID) settings.clientId = DEFAULT_CLIENT_ID;
 let editingId = null;
 
 function persist(){ localStorage.setItem('bp_records', JSON.stringify(records)); }
@@ -617,28 +623,96 @@ function renderStats(){
   </div>`;
 }
 
-/* ═══════════ 구글 시트 동기화 ═══════════ */
-let pushTimer=null;
+/* ═══════════ 구글 시트 동기화 (Google 로그인 + Sheets API) ═══════════ */
+const OAUTH_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const SHEET_TITLE = '혈압기록';
+let pushTimer=null, tokenClient=null, accessToken=null, tokenExp=0;
+
 function debouncedPush(){ clearTimeout(pushTimer); pushTimer=setTimeout(()=>pushToSheet(false), 1500); }
 function recordsPayload(){
   return records.map(r=>({id:r.id, dt:r.dt, sys:r.sys, dia:r.dia, pulse:r.pulse, slot:r.slot, med:r.med?1:0, memo:r.memo||'', stage:STAGES[classify(r.sys,r.dia)].name}));
 }
+
+function getToken(forceConsent){
+  return new Promise((resolve, reject)=>{
+    if(accessToken && Date.now() < tokenExp - 60000) return resolve(accessToken);
+    if(location.protocol === 'file:') return reject(new Error('파일로 직접 열면 구글 로그인이 안 됩니다. 웹 주소(https://...)로 접속하세요'));
+    if(typeof google === 'undefined' || !google.accounts) return reject(new Error('구글 로그인 모듈 로딩 실패. 인터넷 연결을 확인하세요'));
+    const cid = (settings.clientId||'').trim();
+    if(!cid) return reject(new Error('설정에서 Client ID를 먼저 입력하세요'));
+    if(!tokenClient || tokenClient._cid !== cid){
+      tokenClient = google.accounts.oauth2.initTokenClient({client_id:cid, scope:OAUTH_SCOPE, callback:()=>{}});
+      tokenClient._cid = cid;
+    }
+    tokenClient.callback = resp=>{
+      if(resp.error) return reject(new Error(resp.error));
+      accessToken = resp.access_token;
+      tokenExp = Date.now() + (resp.expires_in||3600)*1000;
+      settings.connected = true; persistSettings();
+      resolve(accessToken);
+    };
+    tokenClient.error_callback = e=> reject(new Error(e && e.message ? e.message : '로그인이 취소되었습니다'));
+    tokenClient.requestAccessToken({prompt: forceConsent ? 'consent' : ''});
+  });
+}
+async function api(method, url, body){
+  const tok = await getToken(false);
+  const res = await fetch(url, {
+    method,
+    headers:{Authorization:'Bearer '+tok, 'Content-Type':'application/json'},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const j = await res.json().catch(()=>({}));
+  if(!res.ok){
+    if(res.status===401){ accessToken=null; }
+    throw new Error((j.error && j.error.message) || ('HTTP '+res.status));
+  }
+  return j;
+}
+async function ensureSheet(){
+  if(settings.sheetId){
+    try{
+      const f = await api('GET', `https://www.googleapis.com/drive/v3/files/${settings.sheetId}?fields=id,trashed`);
+      if(!f.trashed) return settings.sheetId;
+    }catch(e){ /* 삭제됨 → 아래에서 재탐색 */ }
+    settings.sheetId='';
+  }
+  // 이 앱이 이전에 만든 시트 찾기 (다른 기기에서 만든 것 포함)
+  const q = encodeURIComponent(`name='${SHEET_TITLE}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`);
+  const list = await api('GET', `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+  if(list.files && list.files.length){
+    settings.sheetId = list.files[0].id;
+  } else {
+    const created = await api('POST', 'https://sheets.googleapis.com/v4/spreadsheets', {properties:{title:SHEET_TITLE}});
+    settings.sheetId = created.spreadsheetId;
+  }
+  persistSettings();
+  return settings.sheetId;
+}
+async function connectGoogle(){
+  saveSettingsFromModal(false);
+  try{
+    accessToken = null; // 새로 로그인
+    await getToken(!settings.connected);
+    toast('연결 중...');
+    await ensureSheet();
+    updateSyncStatus();
+    toast('구글 계정 연결 완료!');
+  }catch(e){ toast(e.message); updateSyncStatus(); }
+}
 async function pushToSheet(manual){
   saveSettingsFromModal(false);
-  if(!settings.scriptUrl){ if(manual) toast('설정에서 Apps Script URL을 먼저 입력하세요'); return; }
+  if(!settings.clientId){ if(manual) toast('설정에서 Client ID를 먼저 입력하세요'); return; }
   try{
     if(manual) toast('시트로 전송 중...');
-    const res = await fetch(settings.scriptUrl, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({action:'replace', records: recordsPayload()})
-    });
-    const j = await res.json();
-    if(j.ok){
-      settings.lastSync = new Date().toLocaleString('ko-KR');
-      persistSettings(); updateSyncStatus();
-      if(manual) toast(`시트 저장 완료 (${j.count}건)`);
-    } else throw new Error(j.error||'unknown');
+    const id = await ensureSheet();
+    const head = ['ID','날짜','시간','시간대','수축기','이완기','맥박','복약','메모','단계'];
+    const rows = recordsPayload().map(r=>[r.id, r.dt.slice(0,10), r.dt.slice(11,16), SLOT_NAMES[r.slot]||r.slot, r.sys, r.dia, r.pulse, r.med?'O':'', r.memo||'', r.stage]);
+    await api('POST', `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/A1:J100000:clear`, {});
+    await api('PUT', `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/A1?valueInputOption=RAW`, {values:[head, ...rows]});
+    settings.lastSync = new Date().toLocaleString('ko-KR');
+    persistSettings(); updateSyncStatus();
+    if(manual) toast(`시트 저장 완료 (${rows.length}건)`);
   }catch(e){
     if(manual) toast('시트 전송 실패: ' + e.message);
     console.error(e);
@@ -646,14 +720,17 @@ async function pushToSheet(manual){
 }
 async function pullFromSheet(){
   saveSettingsFromModal(false);
-  if(!settings.scriptUrl){ toast('설정에서 Apps Script URL을 먼저 입력하세요'); return; }
+  if(!settings.clientId){ toast('설정에서 Client ID를 먼저 입력하세요'); return; }
   try{
     toast('시트에서 가져오는 중...');
-    const res = await fetch(settings.scriptUrl + '?action=get');
-    const j = await res.json();
-    if(!j.ok) throw new Error(j.error||'unknown');
+    const id = await ensureSheet();
+    const j = await api('GET', `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/A1:J100000`);
+    const slotRev = {'아침':'morning','낮':'day','저녁':'evening'};
     const byId = {};
-    j.records.forEach(r=> byId[r.id] = {id:String(r.id), dt:String(r.dt), sys:+r.sys, dia:+r.dia, pulse:+r.pulse, slot:r.slot||'day', med:!!(+r.med), memo:String(r.memo||'')});
+    (j.values||[]).slice(1).forEach(v=>{
+      if(!v[0]||!v[1]) return;
+      byId[v[0]] = {id:String(v[0]), dt:String(v[1])+'T'+String(v[2]||'00:00').slice(0,5), sys:+v[4], dia:+v[5], pulse:+v[6], slot:slotRev[v[3]]||'day', med:String(v[7])==='O', memo:String(v[8]||'')};
+    });
     records.forEach(r=> byId[r.id]=r); // 로컬 우선
     records = Object.values(byId).sort((a,b)=> a.dt.localeCompare(b.dt));
     persist(); renderAll();
@@ -703,16 +780,26 @@ function importCSV(input){
 
 /* ═══════════ 설정/모달 ═══════════ */
 function openSettings(){
-  document.getElementById('setUrl').value = settings.scriptUrl;
+  document.getElementById('setClientId').value = settings.clientId;
   document.getElementById('setAutoSync').checked = settings.autoSync;
   updateSyncStatus();
   document.getElementById('settingsModal').classList.remove('hidden');
 }
 function updateSyncStatus(){
   document.getElementById('syncStatus').textContent = settings.lastSync? '마지막 동기화: '+settings.lastSync : '아직 동기화한 적 없음';
+  const link = document.getElementById('gSheetLink');
+  const btn = document.getElementById('gConnectBtn');
+  if(settings.connected && settings.sheetId){
+    btn.textContent = '✅ 연결됨 (다시 연결하려면 클릭)';
+    link.innerHTML = `<a href="https://docs.google.com/spreadsheets/d/${settings.sheetId}" target="_blank" style="color:var(--accent)">📊 내 혈압기록 시트 열기</a>`;
+  } else {
+    btn.textContent = '🔗 Google 계정 연결';
+    link.textContent = settings.clientId ? '아직 연결되지 않았습니다' : 'Client ID 입력 후 연결하세요';
+  }
 }
 function saveSettingsFromModal(closeAfter){
-  settings.scriptUrl = document.getElementById('setUrl').value.trim();
+  const el = document.getElementById('setClientId');
+  if(el.value.trim()) settings.clientId = el.value.trim();
   settings.autoSync = document.getElementById('setAutoSync').checked;
   persistSettings();
   if(closeAfter) closeModal('settingsModal');
@@ -730,6 +817,8 @@ function wipeAll(){
 }
 
 /* ═══════════ 시작 ═══════════ */
+document.getElementById('setClientId').value = settings.clientId;
+document.getElementById('setAutoSync').checked = settings.autoSync;
 initInputForm();
 renderAll();
 </script>
