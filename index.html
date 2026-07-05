@@ -37,16 +37,11 @@ main{flex:1;overflow-y:auto;padding:0 16px 90px}
 .seg button{flex:1;border:none;background:none;padding:8px 0;border-radius:8px;font-size:14px;color:var(--sub);cursor:pointer;font-family:inherit}
 .seg button.on{background:var(--card);color:var(--text);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.1)}
 
-.picker-wrap{display:flex;gap:6px;position:relative;margin:6px 0 4px}
-.picker-group{flex:1;text-align:center}
-.picker-group label{font-size:12px;color:var(--sub);display:block;margin-bottom:6px}
-.picker{height:200px;overflow-y:scroll;scroll-snap-type:y mandatory;position:relative;scrollbar-width:none;border-radius:12px;background:var(--bg)}
-.picker::-webkit-scrollbar{display:none}
-.picker .pad{height:80px}
-.picker .item{height:40px;line-height:40px;font-size:22px;color:#94a3b8;scroll-snap-align:center;cursor:pointer;font-variant-numeric:tabular-nums;transition:transform .1s,color .1s}
-.picker .item.sel{color:var(--text);font-weight:800;font-size:26px}
-.pk-outer{position:relative}
-.picker-band{position:absolute;left:0;right:0;top:calc(50% - 20px);height:40px;pointer-events:none;border-top:2px solid var(--accent);border-bottom:2px solid var(--accent);background:rgba(37,99,235,.05);border-radius:4px}
+.sel-wrap{display:flex;gap:8px;margin:6px 0 4px}
+.sel-group{flex:1;text-align:center}
+.sel-group label{font-size:12px;color:var(--sub);display:block;margin-bottom:6px}
+.bp-select{width:100%;font-size:24px;font-weight:800;text-align:center;text-align-last:center;padding:16px 2px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--text);font-family:inherit;font-variant-numeric:tabular-nums;-webkit-appearance:none;-moz-appearance:none;appearance:none;cursor:pointer}
+.bp-select:focus{outline:2px solid var(--accent);border-color:var(--accent)}
 
 .stage-live{text-align:center;padding:10px;border-radius:10px;font-size:16px;font-weight:700;margin-top:10px;background:var(--bg)}
 .opt-row{display:flex;align-items:center;gap:10px;margin-top:12px}
@@ -138,18 +133,18 @@ main{flex:1;overflow-y:auto;padding:0 16px 90px}
         </div>
       </div>
       <div class="card">
-        <div class="picker-wrap">
-          <div class="picker-group">
+        <div class="sel-wrap">
+          <div class="sel-group">
             <label>수축기 (최고)</label>
-            <div class="pk-outer"><div class="picker" id="pkSys"></div><div class="picker-band"></div></div>
+            <select class="bp-select" id="pkSys"></select>
           </div>
-          <div class="picker-group">
+          <div class="sel-group">
             <label>이완기 (최저)</label>
-            <div class="pk-outer"><div class="picker" id="pkDia"></div><div class="picker-band"></div></div>
+            <select class="bp-select" id="pkDia"></select>
           </div>
-          <div class="picker-group">
+          <div class="sel-group">
             <label>맥박</label>
-            <div class="pk-outer"><div class="picker" id="pkPulse"></div><div class="picker-band"></div></div>
+            <select class="bp-select" id="pkPulse"></select>
           </div>
         </div>
         <div class="stage-live" id="stageLive">--</div>
@@ -298,56 +293,29 @@ function classify(sys, dia){
 const SLOT_NAMES = {morning:'아침', day:'낮', evening:'저녁'};
 function autoSlot(hour){ if(hour>=4&&hour<12) return 'morning'; if(hour>=12&&hour<17) return 'day'; return 'evening'; }
 
-/* ═══════════ 휠 피커 ═══════════ */
-const ITEM_H = 40;
+/* ═══════════ 숫자 입력 (OS 네이티브 피커 = select) ═══════════ */
 function buildPicker(elId, min, max, initial){
   const el = document.getElementById(elId);
-  el.innerHTML = '';
-  const padT = document.createElement('div'); padT.className='pad'; el.appendChild(padT);
-  for(let v=min; v<=max; v++){
-    const d = document.createElement('div');
-    d.className='item'; d.textContent=v; d.dataset.v=v;
-    d.onclick = ()=> setPicker(elId, v, true);
-    el.appendChild(d);
+  if(!el.options.length){
+    for(let v=min; v<=max; v++){
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      el.appendChild(o);
+    }
+    el.addEventListener('change', updateStageLive);
   }
-  const padB = document.createElement('div'); padB.className='pad'; el.appendChild(padB);
-  el._min=min; el._max=max; el._val=initial;
-  if(!el._wired){ el._wired=true;
-  let tm=null;
-  el.addEventListener('scroll', ()=>{
-    highlight(el);
-    clearTimeout(tm);
-    tm = setTimeout(()=>{
-      const idx = Math.round(el.scrollTop / ITEM_H);
-      const v = Math.min(el._max, Math.max(el._min, el._min + idx));
-      el._val = v;
-      el.scrollTo({top:(v-el._min)*ITEM_H, behavior:'smooth'});
-      highlight(el);
-      updateStageLive();
-    }, 120);
-  });
-  }
-  setPicker(elId, initial, false);
+  setPicker(elId, initial);
 }
-function setPicker(elId, v, smooth){
+function setPicker(elId, v){
   const el = document.getElementById(elId);
-  v = Math.min(el._max, Math.max(el._min, Math.round(v)));
-  el._val = v;
-  requestAnimationFrame(()=>{
-    el.scrollTo({top:(v-el._min)*ITEM_H, behavior: smooth?'smooth':'auto'});
-    highlight(el);
-    updateStageLive();
-  });
+  el.value = String(Math.round(v));
+  if(el.selectedIndex < 0) el.selectedIndex = 0;
+  updateStageLive();
 }
-function getPicker(elId){ return document.getElementById(elId)._val; }
-function highlight(el){
-  const idx = Math.round(el.scrollTop / ITEM_H);
-  const items = el.querySelectorAll('.item');
-  items.forEach((it,i)=> it.classList.toggle('sel', i===idx));
-}
+function getPicker(elId){ return parseInt(document.getElementById(elId).value, 10); }
 function updateStageLive(){
   const s=getPicker('pkSys'), d=getPicker('pkDia');
-  if(s==null||d==null) return;
+  if(!s||!d||isNaN(s)||isNaN(d)) return;
   const st = STAGES[classify(s,d)];
   const box = document.getElementById('stageLive');
   box.textContent = `${s} / ${d} mmHg · ${st.name}`;
