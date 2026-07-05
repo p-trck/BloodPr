@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>혈압 관리</title>
+<style>
+:root{
+  --bg:#f1f5f9; --card:#ffffff; --text:#1e293b; --sub:#64748b; --line:#e2e8f0;
+  --accent:#2563eb; --accent-soft:#dbeafe;
+  --low:#3b82f6; --normal:#22c55e; --elevated:#eab308; --pre:#f97316; --st1:#ef4444; --st2:#b91c1c;
+  --sys-line:#ef4444; --dia-line:#3b82f6; --pulse-line:#94a3b8;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var(--bg);color:var(--text);display:flex;justify-content:center}
+#app{width:100%;max-width:480px;min-height:100vh;display:flex;flex-direction:column;background:var(--bg)}
+header{padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:20px;font-weight:700}
+header .hbtns{display:flex;gap:8px}
+.icon-btn{border:none;background:var(--card);border-radius:10px;width:38px;height:38px;font-size:18px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+main{flex:1;overflow-y:auto;padding:0 16px 90px}
+.tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:flex;background:var(--card);border-top:1px solid var(--line);z-index:20}
+.tabbar button{flex:1;border:none;background:none;padding:10px 0 12px;font-size:12px;color:var(--sub);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.tabbar button .ico{font-size:20px}
+.tabbar button.active{color:var(--accent);font-weight:700}
+.card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.card h3{font-size:14px;color:var(--sub);margin-bottom:10px;font-weight:600}
+.hidden{display:none!important}
+
+/* ── 입력 탭 ── */
+.dt-row{display:flex;gap:8px;margin-bottom:10px}
+.dt-row input{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:15px;background:var(--card);color:var(--text);font-family:inherit}
+.seg{display:flex;background:var(--bg);border-radius:10px;padding:3px;gap:3px}
+.seg button{flex:1;border:none;background:none;padding:8px 0;border-radius:8px;font-size:14px;color:var(--sub);cursor:pointer;font-family:inherit}
+.seg button.on{background:var(--card);color:var(--text);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+
+.picker-wrap{display:flex;gap:6px;position:relative;margin:6px 0 4px}
+.picker-group{flex:1;text-align:center}
+.picker-group label{font-size:12px;color:var(--sub);display:block;margin-bottom:6px}
+.picker{height:200px;overflow-y:scroll;scroll-snap-type:y mandatory;position:relative;scrollbar-width:none;border-radius:12px;background:var(--bg)}
+.picker::-webkit-scrollbar{display:none}
+.picker .pad{height:80px}
+.picker .item{height:40px;line-height:40px;font-size:22px;color:#94a3b8;scroll-snap-align:center;cursor:pointer;font-variant-numeric:tabular-nums;transition:transform .1s,color .1s}
+.picker .item.sel{color:var(--text);font-weight:800;font-size:26px}
+.pk-outer{position:relative}
+.picker-band{position:absolute;left:0;right:0;top:calc(50% - 20px);height:40px;pointer-events:none;border-top:2px solid var(--accent);border-bottom:2px solid var(--accent);background:rgba(37,99,235,.05);border-radius:4px}
+
+.stage-live{text-align:center;padding:10px;border-radius:10px;font-size:16px;font-weight:700;margin-top:10px;background:var(--bg)}
+.opt-row{display:flex;align-items:center;gap:10px;margin-top:12px}
+.opt-row label.chk{display:flex;align-items:center;gap:6px;font-size:15px;cursor:pointer;white-space:nowrap}
+.opt-row input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
+.opt-row input[type=text]{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:15px;font-family:inherit}
+.save-btn{width:100%;margin-top:14px;border:none;background:var(--accent);color:#fff;font-size:17px;font-weight:700;padding:14px;border-radius:12px;cursor:pointer;font-family:inherit}
+.cancel-btn{width:100%;margin-top:8px;border:none;background:var(--line);color:var(--sub);font-size:15px;padding:10px;border-radius:12px;cursor:pointer;font-family:inherit}
+.recent-mini{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--sub);margin-top:4px}
+
+/* ── 기록 탭 ── */
+.day-group{margin-bottom:14px}
+.day-title{font-size:13px;color:var(--sub);font-weight:700;margin:0 2px 6px}
+.rec{background:var(--card);border-radius:12px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.rec .bar{width:5px;align-self:stretch;border-radius:3px}
+.rec .body{flex:1;min-width:0}
+.rec .l1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.rec .bp{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums}
+.rec .pulse{font-size:13px;color:var(--sub)}
+.rec .l2{font-size:12px;color:var(--sub);margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.rec .memo{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
+.chip{font-size:11px;padding:2px 8px;border-radius:20px;color:#fff;font-weight:700;white-space:nowrap}
+.slot-chip{font-size:11px;padding:2px 7px;border-radius:20px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.rec .acts{display:flex;gap:4px}
+.rec .acts button{border:none;background:var(--bg);border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:14px}
+.empty{text-align:center;color:var(--sub);padding:40px 0;font-size:14px}
+
+/* ── 그래프/통계 ── */
+.filter-row{display:flex;gap:8px;margin-bottom:10px}
+.filter-row .seg{flex:1}
+#chartBox svg{width:100%;height:auto;display:block}
+.chart-readout{font-size:13px;color:var(--sub);text-align:center;min-height:20px;margin-top:6px}
+.legend{display:flex;gap:14px;justify-content:center;font-size:12px;color:var(--sub);margin-top:6px}
+.legend span::before{content:'';display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.legend .lg-sys::before{background:var(--sys-line)}
+.legend .lg-dia::before{background:var(--dia-line)}
+.legend .lg-pulse::before{background:var(--pulse-line)}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat-cell{background:var(--bg);border-radius:10px;padding:12px;text-align:center}
+.stat-cell .v{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+.stat-cell .k{font-size:12px;color:var(--sub);margin-top:2px}
+.dist-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px}
+.dist-row .nm{width:86px;color:var(--sub)}
+.dist-row .track{flex:1;height:14px;background:var(--bg);border-radius:7px;overflow:hidden}
+.dist-row .fill{height:100%;border-radius:7px}
+.dist-row .ct{width:30px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* ── 모달 ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.modal{background:var(--card);width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:20px 18px 28px;max-height:85vh;overflow-y:auto}
+.modal h2{font-size:17px;margin-bottom:14px}
+.modal .row{margin-bottom:14px}
+.modal label{font-size:13px;color:var(--sub);display:block;margin-bottom:5px}
+.modal input[type=url]{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-family:inherit}
+.modal .btn{width:100%;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px;font-family:inherit;background:var(--bg);color:var(--text)}
+.modal .btn.primary{background:var(--accent);color:#fff}
+.modal .btn.danger{background:#fee2e2;color:#b91c1c}
+.sync-status{font-size:12px;color:var(--sub);text-align:center;margin-bottom:10px}
+.tip-list{font-size:14px;line-height:1.7;color:var(--text)}
+.tip-list li{margin-bottom:8px;margin-left:18px}
+.close-x{float:right;border:none;background:none;font-size:20px;cursor:pointer;color:var(--sub)}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 18px;border-radius:24px;font-size:14px;z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🩺 혈압 관리</h1>
+    <div class="hbtns">
+      <button class="icon-btn" onclick="openTips()" title="측정 팁">💡</button>
+      <button class="icon-btn" onclick="openSettings()" title="설정">⚙️</button>
+    </div>
+  </header>
+  <main>
+
+    <!-- 입력 탭 -->
+    <section id="tab-input">
+      <div class="card">
+        <h3 id="inputTitle">새 측정 기록</h3>
+        <div class="dt-row">
+          <input type="date" id="inDate">
+          <input type="time" id="inTime">
+        </div>
+        <div class="seg" id="slotSeg">
+          <button data-slot="morning">🌅 아침</button>
+          <button data-slot="day">☀️ 낮</button>
+          <button data-slot="evening">🌙 저녁</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="picker-wrap">
+          <div class="picker-group">
+            <label>수축기 (최고)</label>
+            <div class="pk-outer"><div class="picker" id="pkSys"></div><div class="picker-band"></div></div>
+          </div>
+          <div class="picker-group">
+            <label>이완기 (최저)</label>
+            <div class="pk-outer"><div class="picker" id="pkDia"></div><div class="picker-band"></div></div>
+          </div>
+          <div class="picker-group">
+            <label>맥박</label>
+            <div class="pk-outer"><div class="picker" id="pkPulse"></div><div class="picker-band"></div></div>
+          </div>
+        </div>
+        <div class="stage-live" id="stageLive">--</div>
+        <div class="recent-mini" id="recentMini"></div>
+        <div class="opt-row">
+          <label class="chk"><input type="checkbox" id="inMed">💊 복약</label>
+          <input type="text" id="inMemo" placeholder="메모 (운동, 컨디션, 음주 등)" maxlength="100">
+        </div>
+        <button class="save-btn" id="saveBtn" onclick="saveRecord()">저장</button>
+        <button class="cancel-btn hidden" id="cancelEditBtn" onclick="cancelEdit()">수정 취소</button>
+      </div>
+    </section>
+
+    <!-- 기록 탭 -->
+    <section id="tab-list" class="hidden">
+      <div id="recList"></div>
+    </section>
+
+    <!-- 그래프 탭 -->
+    <section id="tab-chart" class="hidden">
+      <div class="card">
+        <div class="filter-row">
+          <div class="seg" id="periodSeg">
+            <button data-p="7">7일</button>
+            <button data-p="30" class="on">30일</button>
+            <button data-p="90">90일</button>
+            <button data-p="0">전체</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <div class="seg" id="slotFilterSeg">
+            <button data-sf="all" class="on">전체</button>
+            <button data-sf="morning">아침</button>
+            <button data-sf="evening">저녁</button>
+          </div>
+          <label class="chk" style="font-size:13px;display:flex;align-items:center;gap:4px">
+            <input type="checkbox" id="showPulse">맥박
+          </label>
+        </div>
+        <div id="chartBox"></div>
+        <div class="legend"><span class="lg-sys">수축기</span><span class="lg-dia">이완기</span><span class="lg-pulse">맥박</span></div>
+        <div class="chart-readout" id="chartReadout">점을 누르면 상세값이 표시됩니다</div>
+      </div>
+    </section>
+
+    <!-- 통계 탭 -->
+    <section id="tab-stats" class="hidden">
+      <div class="card">
+        <div class="seg" id="statPeriodSeg">
+          <button data-p="7">7일</button>
+          <button data-p="30" class="on">30일</button>
+          <button data-p="90">90일</button>
+          <button data-p="0">전체</button>
+        </div>
+      </div>
+      <div id="statsBox"></div>
+    </section>
+
+  </main>
+
+  <nav class="tabbar">
+    <button class="active" data-tab="input"><span class="ico">✏️</span>입력</button>
+    <button data-tab="list"><span class="ico">📋</span>기록</button>
+    <button data-tab="chart"><span class="ico">📈</span>그래프</button>
+    <button data-tab="stats"><span class="ico">📊</span>통계</button>
+  </nav>
+
+  <!-- 설정 모달 -->
+  <div class="modal-bg hidden" id="settingsModal">
+    <div class="modal">
+      <button class="close-x" onclick="closeModal('settingsModal')">✕</button>
+      <h2>⚙️ 설정</h2>
+      <div class="row">
+        <label>Google Apps Script 웹앱 URL (구글 시트 연동)</label>
+        <input type="url" id="setUrl" placeholder="https://script.google.com/macros/s/.../exec">
+      </div>
+      <div class="row">
+        <label class="chk" style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text)">
+          <input type="checkbox" id="setAutoSync">저장할 때마다 자동으로 시트에 백업
+        </label>
+      </div>
+      <div class="sync-status" id="syncStatus"></div>
+      <button class="btn primary" onclick="pushToSheet(true)">⬆️ 지금 시트로 내보내기</button>
+      <button class="btn" onclick="pullFromSheet()">⬇️ 시트에서 가져오기 (병합)</button>
+      <button class="btn" onclick="exportCSV()">📄 CSV 파일로 내보내기</button>
+      <button class="btn" onclick="document.getElementById('csvFile').click()">📥 CSV 파일 가져오기</button>
+      <input type="file" id="csvFile" accept=".csv" class="hidden" onchange="importCSV(this)">
+      <button class="btn danger" onclick="wipeAll()">🗑️ 모든 데이터 삭제</button>
+    </div>
+  </div>
+
+  <!-- 측정 팁 모달 -->
+  <div class="modal-bg hidden" id="tipsModal">
+    <div class="modal">
+      <button class="close-x" onclick="closeModal('tipsModal')">✕</button>
+      <h2>💡 올바른 혈압 측정법</h2>
+      <ul class="tip-list">
+        <li><b>아침:</b> 기상 후 1시간 이내, 소변을 본 후, 아침 약 복용 전·식사 전에 측정하세요.</li>
+        <li><b>저녁:</b> 잠자리에 들기 전에 측정하세요.</li>
+        <li>측정 전 5분간 등받이 의자에 앉아 안정을 취하세요.</li>
+        <li>커피·흡연·운동 후에는 30분 이상 지나서 측정하세요.</li>
+        <li>커프(팔띠)는 심장 높이에 맞추고, 다리를 꼬지 마세요.</li>
+        <li>1~2분 간격으로 2회 측정해 평균값을 기록하면 더 정확합니다.</li>
+        <li>측정 중에는 말을 하지 마세요.</li>
+      </ul>
+      <p style="font-size:12px;color:var(--sub);margin-top:12px">※ 혈압 단계 기준: 대한고혈압학회 진료지침. 이 앱은 참고용이며 진단은 반드시 의사와 상담하세요.</p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+<script>
+'use strict';
+/* ═══════════ 데이터 ═══════════ */
+let records = JSON.parse(localStorage.getItem('bp_records') || '[]');
+let settings = Object.assign({scriptUrl:'', autoSync:false, lastSync:''}, JSON.parse(localStorage.getItem('bp_settings') || '{}'));
+let editingId = null;
+
+function persist(){ localStorage.setItem('bp_records', JSON.stringify(records)); }
+function persistSettings(){ localStorage.setItem('bp_settings', JSON.stringify(settings)); }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ═══════════ 혈압 단계 (대한고혈압학회) ═══════════ */
+const STAGES = {
+  low:      {name:'저혈압',       color:'var(--low)',      hex:'#3b82f6'},
+  normal:   {name:'정상',         color:'var(--normal)',   hex:'#22c55e'},
+  elevated: {name:'주의혈압',     color:'var(--elevated)', hex:'#eab308'},
+  pre:      {name:'고혈압전단계', color:'var(--pre)',      hex:'#f97316'},
+  st1:      {name:'고혈압 1기',   color:'var(--st1)',      hex:'#ef4444'},
+  st2:      {name:'고혈압 2기',   color:'var(--st2)',      hex:'#b91c1c'}
+};
+function classify(sys, dia){
+  if(sys>=160||dia>=100) return 'st2';
+  if(sys>=140||dia>=90)  return 'st1';
+  if(sys>=130||dia>=80)  return 'pre';
+  if(sys>=120)           return 'elevated';
+  if(sys<90||dia<60)     return 'low';
+  return 'normal';
+}
+const SLOT_NAMES = {morning:'아침', day:'낮', evening:'저녁'};
+function autoSlot(hour){ if(hour>=4&&hour<12) return 'morning'; if(hour>=12&&hour<17) return 'day'; return 'evening'; }
+
+/* ═══════════ 휠 피커 ═══════════ */
+const ITEM_H = 40;
+function buildPicker(elId, min, max, initial){
+  const el = document.getElementById(elId);
+  el.innerHTML = '';
+  const padT = document.createElement('div'); padT.className='pad'; el.appendChild(padT);
+  for(let v=min; v<=max; v++){
+    const d = document.createElement('div');
+    d.className='item'; d.textContent=v; d.dataset.v=v;
+    d.onclick = ()=> setPicker(elId, v, true);
+    el.appendChild(d);
+  }
+  const padB = document.createElement('div'); padB.className='pad'; el.appendChild(padB);
+  el._min=min; el._max=max; el._val=initial;
+  if(!el._wired){ el._wired=true;
+  let tm=null;
+  el.addEventListener('scroll', ()=>{
+    highlight(el);
+    clearTimeout(tm);
+    tm = setTimeout(()=>{
+      const idx = Math.round(el.scrollTop / ITEM_H);
+      const v = Math.min(el._max, Math.max(el._min, el._min + idx));
+      el._val = v;
+      el.scrollTo({top:(v-el._min)*ITEM_H, behavior:'smooth'});
+      highlight(el);
+      updateStageLive();
+    }, 120);
+  });
+  }
+  setPicker(elId, initial, false);
+}
+function setPicker(elId, v, smooth){
+  const el = document.getElementById(elId);
+  v = Math.min(el._max, Math.max(el._min, Math.round(v)));
+  el._val = v;
+  requestAnimationFrame(()=>{
+    el.scrollTo({top:(v-el._min)*ITEM_H, behavior: smooth?'smooth':'auto'});
+    highlight(el);
+    updateStageLive();
+  });
+}
+function getPicker(elId){ return document.getElementById(elId)._val; }
+function highlight(el){
+  const idx = Math.round(el.scrollTop / ITEM_H);
+  const items = el.querySelectorAll('.item');
+  items.forEach((it,i)=> it.classList.toggle('sel', i===idx));
+}
+function updateStageLive(){
+  const s=getPicker('pkSys'), d=getPicker('pkDia');
+  if(s==null||d==null) return;
+  const st = STAGES[classify(s,d)];
+  const box = document.getElementById('stageLive');
+  box.textContent = `${s} / ${d} mmHg · ${st.name}`;
+  box.style.color = st.hex;
+  box.style.background = st.hex + '18';
+}
+
+/* ═══════════ 입력 탭 ═══════════ */
+let curSlot = 'morning';
+function selectSlot(slot){
+  curSlot = slot;
+  document.querySelectorAll('#slotSeg button').forEach(b=> b.classList.toggle('on', b.dataset.slot===slot));
+}
+document.querySelectorAll('#slotSeg button').forEach(b=> b.onclick=()=>selectSlot(b.dataset.slot));
+
+function initInputForm(){
+  const now = new Date();
+  document.getElementById('inDate').value = fmtDate(now);
+  document.getElementById('inTime').value = now.toTimeString().slice(0,5);
+  selectSlot(autoSlot(now.getHours()));
+  const last = [...records].sort((a,b)=> b.dt.localeCompare(a.dt))[0];
+  const s = last? last.sys:120, d = last? last.dia:80, p = last? last.pulse:70;
+  buildPicker('pkSys', 70, 220, s);
+  buildPicker('pkDia', 40, 130, d);
+  buildPicker('pkPulse', 40, 180, p);
+  const rm = document.getElementById('recentMini');
+  rm.textContent = last ? `최근 기록: ${last.dt.slice(5,10).replace('-','/')} ${last.dt.slice(11,16)} · ${last.sys}/${last.dia}` : '첫 기록을 입력해 보세요!';
+}
+document.getElementById('inTime').addEventListener('change', e=>{
+  const h = parseInt(e.target.value.slice(0,2),10);
+  if(!isNaN(h)) selectSlot(autoSlot(h));
+});
+
+function fmtDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+function saveRecord(){
+  const date = document.getElementById('inDate').value;
+  const time = document.getElementById('inTime').value;
+  if(!date||!time){ toast('날짜와 시간을 확인해 주세요'); return; }
+  const rec = {
+    id: editingId || uid(),
+    dt: date+'T'+time,
+    sys: getPicker('pkSys'), dia: getPicker('pkDia'), pulse: getPicker('pkPulse'),
+    slot: curSlot,
+    med: document.getElementById('inMed').checked,
+    memo: document.getElementById('inMemo').value.trim()
+  };
+  if(rec.sys <= rec.dia){ toast('수축기가 이완기보다 커야 합니다'); return; }
+  if(editingId){
+    const i = records.findIndex(r=>r.id===editingId);
+    if(i>=0) records[i]=rec;
+    editingId=null;
+    toast('수정되었습니다');
+  } else {
+    records.push(rec);
+    const st = STAGES[classify(rec.sys,rec.dia)];
+    toast(`저장 완료 · ${st.name}`);
+  }
+  persist();
+  resetForm();
+  renderAll();
+  if(settings.autoSync && settings.scriptUrl) debouncedPush();
+}
+function resetForm(){
+  editingId=null;
+  document.getElementById('inputTitle').textContent='새 측정 기록';
+  document.getElementById('saveBtn').textContent='저장';
+  document.getElementById('cancelEditBtn').classList.add('hidden');
+  document.getElementById('inMed').checked=false;
+  document.getElementById('inMemo').value='';
+  initInputForm();
+}
+function editRecord(id){
+  const r = records.find(x=>x.id===id); if(!r) return;
+  editingId = id;
+  switchTab('input');
+  document.getElementById('inputTitle').textContent='기록 수정';
+  document.getElementById('saveBtn').textContent='수정 저장';
+  document.getElementById('cancelEditBtn').classList.remove('hidden');
+  document.getElementById('inDate').value = r.dt.slice(0,10);
+  document.getElementById('inTime').value = r.dt.slice(11,16);
+  selectSlot(r.slot);
+  setPicker('pkSys', r.sys, false); setPicker('pkDia', r.dia, false); setPicker('pkPulse', r.pulse, false);
+  document.getElementById('inMed').checked = r.med;
+  document.getElementById('inMemo').value = r.memo||'';
+}
+function cancelEdit(){ resetForm(); }
+function deleteRecord(id){
+  if(!confirm('이 기록을 삭제할까요?')) return;
+  records = records.filter(r=>r.id!==id);
+  persist(); renderAll(); toast('삭제되었습니다');
+  if(settings.autoSync && settings.scriptUrl) debouncedPush();
+}
+
+/* ═══════════ 탭 전환 ═══════════ */
+function switchTab(name){
+  ['input','list','chart','stats'].forEach(t=>{
+    document.getElementById('tab-'+t).classList.toggle('hidden', t!==name);
+  });
+  document.querySelectorAll('.tabbar button').forEach(b=> b.classList.toggle('active', b.dataset.tab===name));
+  if(name==='list') renderList();
+  if(name==='chart') renderChart();
+  if(name==='stats') renderStats();
+}
+document.querySelectorAll('.tabbar button').forEach(b=> b.onclick=()=>switchTab(b.dataset.tab));
+function renderAll(){
+  renderList(); renderChart(); renderStats();
+}
+/* ═══════════ 기록 목록 ═══════════ */
+function renderList(){
+  const box = document.getElementById('recList');
+  if(!records.length){ box.innerHTML='<div class="empty">아직 기록이 없습니다.<br>입력 탭에서 첫 혈압을 기록해 보세요.</div>'; return; }
+  const sorted = [...records].sort((a,b)=> b.dt.localeCompare(a.dt));
+  const groups = {};
+  sorted.forEach(r=>{ const d=r.dt.slice(0,10); (groups[d]=groups[d]||[]).push(r); });
+  const wd = ['일','월','화','수','목','금','토'];
+  let html='';
+  for(const d in groups){
+    const dateObj = new Date(d+'T00:00');
+    html += `<div class="day-group"><div class="day-title">${d.replace(/-/g,'.')} (${wd[dateObj.getDay()]})</div>`;
+    groups[d].forEach(r=>{
+      const stKey = classify(r.sys,r.dia), st = STAGES[stKey];
+      html += `<div class="rec">
+        <div class="bar" style="background:${st.hex}"></div>
+        <div class="body">
+          <div class="l1">
+            <span class="bp">${r.sys}/${r.dia}</span>
+            <span class="pulse">♥ ${r.pulse}</span>
+            <span class="chip" style="background:${st.hex}">${st.name}</span>
+          </div>
+          <div class="l2">
+            <span>${r.dt.slice(11,16)}</span>
+            <span class="slot-chip">${SLOT_NAMES[r.slot]||''}</span>
+            ${r.med?'<span>💊 복약</span>':''}
+            ${r.memo?`<span class="memo">📝 ${escapeHtml(r.memo)}</span>`:''}
+          </div>
+        </div>
+        <div class="acts">
+          <button onclick="editRecord('${r.id}')" title="수정">✏️</button>
+          <button onclick="deleteRecord('${r.id}')" title="삭제">🗑</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+  box.innerHTML = html;
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ═══════════ 그래프 ═══════════ */
+let chartPeriod = 30, chartSlotFilter = 'all';
+document.querySelectorAll('#periodSeg button').forEach(b=> b.onclick=()=>{
+  chartPeriod = +b.dataset.p;
+  document.querySelectorAll('#periodSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  renderChart();
+});
+document.querySelectorAll('#slotFilterSeg button').forEach(b=> b.onclick=()=>{
+  chartSlotFilter = b.dataset.sf;
+  document.querySelectorAll('#slotFilterSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  renderChart();
+});
+document.getElementById('showPulse').addEventListener('change', renderChart);
+
+function filterByPeriod(list, days){
+  if(!days) return list;
+  const cut = new Date(); cut.setDate(cut.getDate()-days); cut.setHours(0,0,0,0);
+  const cutStr = fmtDate(cut);
+  return list.filter(r=> r.dt.slice(0,10) >= cutStr);
+}
+function renderChart(){
+  const box = document.getElementById('chartBox');
+  let data = filterByPeriod(records, chartPeriod);
+  if(chartSlotFilter!=='all') data = data.filter(r=>r.slot===chartSlotFilter);
+  data = [...data].sort((a,b)=> a.dt.localeCompare(b.dt));
+  if(data.length < 2){ box.innerHTML='<div class="empty">표시할 데이터가 부족합니다 (2건 이상 필요)</div>'; return; }
+  const showPulse = document.getElementById('showPulse').checked;
+  const W=460, H=280, padL=34, padR=10, padT=12, padB=28;
+  const vals = data.flatMap(r=> showPulse? [r.sys,r.dia,r.pulse] : [r.sys,r.dia]);
+  let yMin = Math.min(...vals, 60)-10, yMax = Math.max(...vals, 140)+10;
+  yMin = Math.floor(yMin/10)*10; yMax = Math.ceil(yMax/10)*10;
+  const t0 = new Date(data[0].dt).getTime(), t1 = new Date(data[data.length-1].dt).getTime();
+  const span = Math.max(t1-t0, 1);
+  const X = t => padL + (t-t0)/span * (W-padL-padR);
+  const Y = v => padT + (yMax-v)/(yMax-yMin) * (H-padT-padB);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  // y축 그리드
+  for(let v=yMin; v<=yMax; v+=20){
+    svg += `<line x1="${padL}" y1="${Y(v)}" x2="${W-padR}" y2="${Y(v)}" stroke="#e2e8f0" stroke-width="1"/>`;
+    svg += `<text x="${padL-5}" y="${Y(v)+4}" font-size="10" fill="#94a3b8" text-anchor="end">${v}</text>`;
+  }
+  // 기준선 140/90 (고혈압), 120/80
+  [[140,'#ef4444'],[90,'#ef4444'],[120,'#22c55e'],[80,'#22c55e']].forEach(([v,c])=>{
+    if(v>yMin&&v<yMax) svg += `<line x1="${padL}" y1="${Y(v)}" x2="${W-padR}" y2="${Y(v)}" stroke="${c}" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>`;
+  });
+  // x축 날짜 라벨 (최대 5개)
+  const nTicks = Math.min(5, data.length);
+  for(let i=0;i<nTicks;i++){
+    const t = t0 + span*i/(nTicks-1||1);
+    const d = new Date(t);
+    svg += `<text x="${X(t)}" y="${H-8}" font-size="10" fill="#94a3b8" text-anchor="middle">${d.getMonth()+1}/${d.getDate()}</text>`;
+  }
+  // 선
+  const line = (key,color,dash)=>{
+    const pts = data.map(r=> `${X(new Date(r.dt).getTime()).toFixed(1)},${Y(r[key]).toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" ${dash?'stroke-dasharray="5 4"':''} stroke-linejoin="round"/>`;
+  };
+  if(showPulse) svg += line('pulse','#94a3b8',true);
+  svg += line('sys','#ef4444',false);
+  svg += line('dia','#3b82f6',false);
+  // 점 (수축기 점은 단계 색)
+  data.forEach((r,i)=>{
+    const x = X(new Date(r.dt).getTime());
+    const st = STAGES[classify(r.sys,r.dia)];
+    svg += `<circle cx="${x}" cy="${Y(r.sys)}" r="4.5" fill="${st.hex}" stroke="#fff" stroke-width="1.5" style="cursor:pointer" onclick="chartPick(${i})"/>`;
+    svg += `<circle cx="${x}" cy="${Y(r.dia)}" r="3.5" fill="#3b82f6" stroke="#fff" stroke-width="1.5" style="cursor:pointer" onclick="chartPick(${i})"/>`;
+  });
+  svg += '</svg>';
+  box.innerHTML = svg;
+  box._data = data;
+  document.getElementById('chartReadout').textContent = '점을 누르면 상세값이 표시됩니다';
+}
+function chartPick(i){
+  const d = document.getElementById('chartBox')._data[i];
+  if(!d) return;
+  const st = STAGES[classify(d.sys,d.dia)];
+  document.getElementById('chartReadout').innerHTML =
+    `<b>${d.dt.slice(0,10).replace(/-/g,'.')} ${d.dt.slice(11,16)}</b> · ${d.sys}/${d.dia} mmHg · ♥${d.pulse} · <span style="color:${st.hex};font-weight:700">${st.name}</span>${d.med?' · 💊':''}`;
+}
+
+/* ═══════════ 통계 ═══════════ */
+let statPeriod = 30;
+document.querySelectorAll('#statPeriodSeg button').forEach(b=> b.onclick=()=>{
+  statPeriod = +b.dataset.p;
+  document.querySelectorAll('#statPeriodSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  renderStats();
+});
+function avg(arr){ return arr.length? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null; }
+function renderStats(){
+  const box = document.getElementById('statsBox');
+  const data = filterByPeriod(records, statPeriod);
+  if(!data.length){ box.innerHTML='<div class="empty">해당 기간에 기록이 없습니다</div>'; return; }
+  const aS=avg(data.map(r=>r.sys)), aD=avg(data.map(r=>r.dia)), aP=avg(data.map(r=>r.pulse));
+  const morning = data.filter(r=>r.slot==='morning'), evening = data.filter(r=>r.slot==='evening');
+  const maxRec = data.reduce((m,r)=> r.sys>m.sys? r:m, data[0]);
+  const minRec = data.reduce((m,r)=> r.sys<m.sys? r:m, data[0]);
+  const medRate = Math.round(data.filter(r=>r.med).length/data.length*100);
+  const avgStage = STAGES[classify(aS,aD)];
+  // 단계 분포
+  const dist = {};
+  Object.keys(STAGES).forEach(k=>dist[k]=0);
+  data.forEach(r=> dist[classify(r.sys,r.dia)]++);
+  let distHtml='';
+  Object.keys(STAGES).forEach(k=>{
+    if(!dist[k]) return;
+    const pct = Math.round(dist[k]/data.length*100);
+    distHtml += `<div class="dist-row"><span class="nm">${STAGES[k].name}</span><div class="track"><div class="fill" style="width:${pct}%;background:${STAGES[k].hex}"></div></div><span class="ct">${dist[k]}</span></div>`;
+  });
+  box.innerHTML = `
+  <div class="card">
+    <h3>평균 (${data.length}건)</h3>
+    <div class="stat-grid">
+      <div class="stat-cell"><div class="v" style="color:${avgStage.hex}">${aS}/${aD}</div><div class="k">평균 혈압 · ${avgStage.name}</div></div>
+      <div class="stat-cell"><div class="v">${aP}</div><div class="k">평균 맥박</div></div>
+      <div class="stat-cell"><div class="v">${morning.length? avg(morning.map(r=>r.sys))+'/'+avg(morning.map(r=>r.dia)) : '--'}</div><div class="k">🌅 아침 평균 (${morning.length}건)</div></div>
+      <div class="stat-cell"><div class="v">${evening.length? avg(evening.map(r=>r.sys))+'/'+avg(evening.map(r=>r.dia)) : '--'}</div><div class="k">🌙 저녁 평균 (${evening.length}건)</div></div>
+      <div class="stat-cell"><div class="v">${maxRec.sys}/${maxRec.dia}</div><div class="k">최고 (${maxRec.dt.slice(5,10).replace('-','/')})</div></div>
+      <div class="stat-cell"><div class="v">${minRec.sys}/${minRec.dia}</div><div class="k">최저 (${minRec.dt.slice(5,10).replace('-','/')})</div></div>
+    </div>
+  </div>
+  <div class="card"><h3>혈압 단계 분포</h3>${distHtml}</div>
+  <div class="card"><h3>복약률</h3>
+    <div class="dist-row"><span class="nm">💊 복약 체크</span><div class="track"><div class="fill" style="width:${medRate}%;background:var(--accent)"></div></div><span class="ct">${medRate}%</span></div>
+  </div>`;
+}
+
+/* ═══════════ 구글 시트 동기화 ═══════════ */
+let pushTimer=null;
+function debouncedPush(){ clearTimeout(pushTimer); pushTimer=setTimeout(()=>pushToSheet(false), 1500); }
+function recordsPayload(){
+  return records.map(r=>({id:r.id, dt:r.dt, sys:r.sys, dia:r.dia, pulse:r.pulse, slot:r.slot, med:r.med?1:0, memo:r.memo||'', stage:STAGES[classify(r.sys,r.dia)].name}));
+}
+async function pushToSheet(manual){
+  saveSettingsFromModal(false);
+  if(!settings.scriptUrl){ if(manual) toast('설정에서 Apps Script URL을 먼저 입력하세요'); return; }
+  try{
+    if(manual) toast('시트로 전송 중...');
+    const res = await fetch(settings.scriptUrl, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'replace', records: recordsPayload()})
+    });
+    const j = await res.json();
+    if(j.ok){
+      settings.lastSync = new Date().toLocaleString('ko-KR');
+      persistSettings(); updateSyncStatus();
+      if(manual) toast(`시트 저장 완료 (${j.count}건)`);
+    } else throw new Error(j.error||'unknown');
+  }catch(e){
+    if(manual) toast('시트 전송 실패: ' + e.message);
+    console.error(e);
+  }
+}
+async function pullFromSheet(){
+  saveSettingsFromModal(false);
+  if(!settings.scriptUrl){ toast('설정에서 Apps Script URL을 먼저 입력하세요'); return; }
+  try{
+    toast('시트에서 가져오는 중...');
+    const res = await fetch(settings.scriptUrl + '?action=get');
+    const j = await res.json();
+    if(!j.ok) throw new Error(j.error||'unknown');
+    const byId = {};
+    j.records.forEach(r=> byId[r.id] = {id:String(r.id), dt:String(r.dt), sys:+r.sys, dia:+r.dia, pulse:+r.pulse, slot:r.slot||'day', med:!!(+r.med), memo:String(r.memo||'')});
+    records.forEach(r=> byId[r.id]=r); // 로컬 우선
+    records = Object.values(byId).sort((a,b)=> a.dt.localeCompare(b.dt));
+    persist(); renderAll();
+    settings.lastSync = new Date().toLocaleString('ko-KR');
+    persistSettings(); updateSyncStatus();
+    toast(`병합 완료 · 총 ${records.length}건`);
+  }catch(e){ toast('가져오기 실패: ' + e.message); console.error(e); }
+}
+
+/* ═══════════ CSV ═══════════ */
+function exportCSV(){
+  if(!records.length){ toast('내보낼 기록이 없습니다'); return; }
+  const head = 'ID,날짜,시간,시간대,수축기,이완기,맥박,복약,메모,단계';
+  const rows = recordsPayload().map(r=>
+    [r.id, r.dt.slice(0,10), r.dt.slice(11,16), SLOT_NAMES[r.slot]||r.slot, r.sys, r.dia, r.pulse, r.med?'O':'', '"'+(r.memo||'').replace(/"/g,'""')+'"', r.stage].join(','));
+  const blob = new Blob(['﻿'+head+'\n'+rows.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '혈압기록_'+fmtDate(new Date())+'.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function importCSV(input){
+  const f = input.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const lines = e.target.result.replace(/^﻿/,'').split(/\r?\n/).filter(l=>l.trim());
+      const slotRev = {'아침':'morning','낮':'day','저녁':'evening'};
+      let added=0;
+      lines.slice(1).forEach(line=>{
+        const c = line.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map(x=>x.replace(/,$/,'').replace(/^"|"$/g,'').replace(/""/g,'"'));
+        if(c.length<7) return;
+        const id = c[0]||uid();
+        if(records.some(r=>r.id===id)) return;
+        records.push({id, dt:c[1]+'T'+c[2], sys:+c[4], dia:+c[5], pulse:+c[6], slot:slotRev[c[3]]||'day', med:c[7]==='O', memo:c[8]||''});
+        added++;
+      });
+      records.sort((a,b)=> a.dt.localeCompare(b.dt));
+      persist(); renderAll();
+      toast(`${added}건 가져왔습니다`);
+    }catch(err){ toast('CSV 형식을 읽을 수 없습니다'); }
+    input.value='';
+  };
+  reader.readAsText(f, 'utf-8');
+}
+
+/* ═══════════ 설정/모달 ═══════════ */
+function openSettings(){
+  document.getElementById('setUrl').value = settings.scriptUrl;
+  document.getElementById('setAutoSync').checked = settings.autoSync;
+  updateSyncStatus();
+  document.getElementById('settingsModal').classList.remove('hidden');
+}
+function updateSyncStatus(){
+  document.getElementById('syncStatus').textContent = settings.lastSync? '마지막 동기화: '+settings.lastSync : '아직 동기화한 적 없음';
+}
+function saveSettingsFromModal(closeAfter){
+  settings.scriptUrl = document.getElementById('setUrl').value.trim();
+  settings.autoSync = document.getElementById('setAutoSync').checked;
+  persistSettings();
+  if(closeAfter) closeModal('settingsModal');
+}
+function openTips(){ document.getElementById('tipsModal').classList.remove('hidden'); }
+function closeModal(id){
+  if(id==='settingsModal') saveSettingsFromModal(false);
+  document.getElementById(id).classList.add('hidden');
+}
+document.querySelectorAll('.modal-bg').forEach(m=> m.addEventListener('click', e=>{ if(e.target===m) closeModal(m.id); }));
+function wipeAll(){
+  if(!confirm('모든 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
+  if(!confirm('정말 삭제하시겠습니까?')) return;
+  records=[]; persist(); renderAll(); resetForm(); toast('모든 데이터가 삭제되었습니다');
+}
+
+/* ═══════════ 시작 ═══════════ */
+initInputForm();
+renderAll();
+</script>
+</body>
+</html>
