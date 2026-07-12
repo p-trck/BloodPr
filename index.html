@@ -336,7 +336,7 @@ function initInputForm(){
   document.getElementById('inDate').value = fmtDate(now);
   document.getElementById('inTime').value = now.toTimeString().slice(0,5);
   selectSlot(autoSlot(now.getHours()));
-  const last = [...records].sort((a,b)=> b.dt.localeCompare(a.dt))[0];
+  const last = [...records].sort((a,b)=> b.dt.localeCompare(a.dt) || b.id.localeCompare(a.id))[0]; // 시간이 같으면 나중에 저장한 기록 우선
   const s = last? last.sys:120, d = last? last.dia:80, p = last? last.pulse:70;
   buildPicker('pkSys', 70, 220, s);
   buildPicker('pkDia', 40, 130, d);
@@ -370,9 +370,16 @@ function saveRecord(){
     editingId=null;
     toast('수정되었습니다');
   } else {
-    records.push(rec);
-    const st = STAGES[classify(rec.sys,rec.dia)];
-    toast(`저장 완료 · ${st.name}`);
+    const dup = records.find(r=> r.dt===rec.dt);
+    if(dup && confirm(`같은 시각(${rec.dt.slice(11,16)})에 기록이 이미 있습니다.\n기존 ${dup.sys}/${dup.dia} → ${rec.sys}/${rec.dia} 새 값으로 덮어쓸까요?\n(취소하면 둘 다 저장됩니다)`)){
+      rec.id = dup.id;
+      records[records.findIndex(r=>r.id===dup.id)] = rec;
+      toast('기존 기록을 덮어썼습니다');
+    } else {
+      records.push(rec);
+      const st = STAGES[classify(rec.sys,rec.dia)];
+      toast(`저장 완료 · ${st.name}`);
+    }
   }
   persist();
   resetForm();
@@ -428,7 +435,7 @@ function renderAll(){
 function renderList(){
   const box = document.getElementById('recList');
   if(!records.length){ box.innerHTML='<div class="empty">아직 기록이 없습니다.<br>입력 탭에서 첫 혈압을 기록해 보세요.</div>'; return; }
-  const sorted = [...records].sort((a,b)=> b.dt.localeCompare(a.dt));
+  const sorted = [...records].sort((a,b)=> b.dt.localeCompare(a.dt) || b.id.localeCompare(a.id));
   const groups = {};
   sorted.forEach(r=>{ const d=r.dt.slice(0,10); (groups[d]=groups[d]||[]).push(r); });
   const wd = ['일','월','화','수','목','금','토'];
@@ -489,7 +496,7 @@ function renderChart(){
   const box = document.getElementById('chartBox');
   let data = filterByPeriod(records, chartPeriod);
   if(chartSlotFilter!=='all') data = data.filter(r=>r.slot===chartSlotFilter);
-  data = [...data].sort((a,b)=> a.dt.localeCompare(b.dt));
+  data = [...data].sort((a,b)=> a.dt.localeCompare(b.dt) || a.id.localeCompare(b.id));
   if(data.length < 2){ box.innerHTML='<div class="empty">표시할 데이터가 부족합니다 (2건 이상 필요)</div>'; return; }
   const showPulse = document.getElementById('showPulse').checked;
   const W=460, H=280, padL=34, padR=10, padT=12, padB=28;
