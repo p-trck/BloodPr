@@ -377,7 +377,7 @@ function saveRecord(){
   persist();
   resetForm();
   renderAll();
-  if(settings.autoSync && settings.scriptUrl) debouncedPush();
+  if(settings.autoSync && settings.connected) debouncedPush();
 }
 function resetForm(){
   editingId=null;
@@ -407,7 +407,7 @@ function deleteRecord(id){
   if(!confirm('이 기록을 삭제할까요?')) return;
   records = records.filter(r=>r.id!==id);
   persist(); renderAll(); toast('삭제되었습니다');
-  if(settings.autoSync && settings.scriptUrl) debouncedPush();
+  if(settings.autoSync && settings.connected) debouncedPush();
 }
 
 /* ═══════════ 탭 전환 ═══════════ */
