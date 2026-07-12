@@ -594,6 +594,7 @@ function renderStats(){
 /* ═══════════ 구글 시트 동기화 (Google 로그인 + Sheets API) ═══════════ */
 const OAUTH_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const SHEET_TITLE = '혈압기록';
+const HOSPITAL_SHEET = '병원제출용'; // 프린트 제출용 탭 (날짜·시간·시간대·수축기·이완기)
 let pushTimer=null, tokenClient=null, accessToken=null, tokenExp=0;
 
 function debouncedPush(){ clearTimeout(pushTimer); pushTimer=setTimeout(()=>pushToSheet(false), 1500); }
@@ -678,6 +679,15 @@ async function pushToSheet(manual){
     const rows = recordsPayload().map(r=>[r.id, r.dt.slice(0,10), r.dt.slice(11,16), SLOT_NAMES[r.slot]||r.slot, r.sys, r.dia, r.pulse, r.med?'O':'', r.memo||'', r.stage]);
     await api('POST', `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/A1:J100000:clear`, {});
     await api('PUT', `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/A1?valueInputOption=RAW`, {values:[head, ...rows]});
+    // 병원 제출용 탭: 날짜·시간·시간대·수축기·이완기만 저장 (전체 기록)
+    const meta = await api('GET', `https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties.title`);
+    if(!(meta.sheets||[]).some(s=>s.properties && s.properties.title===HOSPITAL_SHEET)){
+      await api('POST', `https://sheets.googleapis.com/v4/spreadsheets/${id}:batchUpdate`, {requests:[{addSheet:{properties:{title:HOSPITAL_SHEET}}}]});
+    }
+    const hHead = ['날짜','시간','시간대','수축기','이완기'];
+    const hRows = recordsPayload().map(r=>[r.dt.slice(0,10), r.dt.slice(11,16), SLOT_NAMES[r.slot]||r.slot, r.sys, r.dia]);
+    await api('POST', `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(`'${HOSPITAL_SHEET}'!A1:E100000`)}:clear`, {});
+    await api('PUT', `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(`'${HOSPITAL_SHEET}'!A1`)}?valueInputOption=RAW`, {values:[hHead, ...hRows]});
     settings.lastSync = new Date().toLocaleString('ko-KR');
     persistSettings(); updateSyncStatus();
     if(manual) toast(`시트 저장 완료 (${rows.length}건)`);
